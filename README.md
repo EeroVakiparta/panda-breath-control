@@ -40,8 +40,8 @@ This is an unofficial program, not affiliated with BIQU / BIGTREETECH. Read
 - A filter gauge: hours of use weighted by material, against Bambu Lab's
   1440 h carbon-filter interval or 180 days, whichever comes first.
 - A run log as a CSV file you can open in a spreadsheet.
-- A live view of the chamber reading and target, with a marker that turns
-  red when the data is stale.
+- A panda that shows the state at a glance, and a trend line of the last 30
+  minutes against the target.
 - English, Finnish and Simplified Chinese.
 - A demo mode that runs without a heater, and a command-line tool for scripts.
 
@@ -118,7 +118,22 @@ changes the target in 5 °C steps; if the heater is already on, the new target
 is applied when you let go. **On** uses the slider value, **Off** switches the
 heater off.
 
-The display shows `chamber / target`. The chamber number comes from the
+### The panda and the trend line
+
+The panda in the middle of the window shows the state:
+
+| Panda | Heater |
+|---|---|
+| Asleep | Off |
+| Eyes open, breathing calmly | On and at the target, filtering |
+| Eyes squeezed shut, red puffed cheeks | On and heating |
+| Grey, with a question mark | No reading for 4 seconds, or no connection |
+
+Below it are the chamber reading, the target and a line of the last 30
+minutes of readings against the dashed target. The dot at the end of the line
+pulses with every reading. The history is kept only while the app is open.
+
+The chamber number comes from the
 heater's own sensor, which sits next to the heating element and reads high:
 one Bambu Lab user saw 60 °C on the Panda Breath while the printer measured
 50 °C. Trust your printer's chamber sensor when it has one.

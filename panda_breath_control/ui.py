@@ -1,4 +1,5 @@
 """The tkinter window."""
+import collections
 import datetime as dt
 import math
 import os
@@ -27,114 +28,234 @@ def ui_family():
 
 
 # ---------------------------------------------------------------------------
-# Animated drawing of the heater
+# Status panel: the panda and the trend line
 # ---------------------------------------------------------------------------
-class HeaterCanvas(tk.Canvas):
-    W, H = 240, 322
-    FANS = ((72, 134), (168, 134))
-    FAN_R = 36
-    PTC_Y = (192, 212)
+INK = "#2b2b30"
+MUTED = "#86868c"
+GRID = "#e2e2e6"
+STALE = "#bdbdc2"
+OFF = "#a4a4aa"
+BLUE = "#3d85c3"
+HEAT = "#e0702a"
+HEAT_HI = "#f4a447"
+BLUSH = "#ff8ea2"
+BLUSH_LITE = "#ffd0d9"
 
-    def __init__(self, master):
-        super().__init__(master, width=self.W, height=self.H, highlightthickness=0,
-                         bg=ttk.Style(master).lookup("TFrame", "background") or "#f0f0f0")
+
+class StatusPanel(tk.Canvas):
+    """The middle of the window: a panda that shows the state, and a trend line.
+
+    The panda sleeps when the heater is off, breathes calmly while it only
+    filters (on and at the target), and puffs red cheeks while heating. Below
+    it: the chamber reading, the target, and the readings of the last 30
+    minutes against the target. The end of the line pulses with every reading;
+    with no fresh data everything turns grey.
+    """
+
+    W, H = 240, 322
+    WINDOW_S = 30 * 60
+    COLUMNS = 98
+    L, R, T, B = 22, 218, 186, 290
+
+    def __init__(self, master, history, cap):
+        bg = ttk.Style(master).lookup("TFrame", "background") or "#f0f0f0"
+        super().__init__(master, width=self.W, height=self.H, highlightthickness=0, bg=bg)
+        self.bg = bg
+        self.history = history   # deque of (time.monotonic(), °C), owned by the App
+        self.cap = cap
         self.on = False
         self.heating = False
-        self.angle = 0.0
-        self.flow = 0
-        self.phase = 0
-        self.stale = False
-        self.lcd_color = "#f2f2f2"
-        self.draw_static()
+        self.current = None
+        self.target = None
+        self.age = None
+        self.stale = True
+        self.flash = 0.0
+        self.t0 = time.monotonic()
         self.after(60, self.tick)
 
-    def draw_static(self):
-        fam = ui_family()
-        self.delete("all")
-        self.create_rectangle(24, 34, 216, 300, fill="#e9e9e9", outline="#3a3a3a", width=2)
-        # display panel: chamber now / target
-        self.create_rectangle(24, 34, 216, 84, fill="#1f1f1f", outline="#3a3a3a", width=2)
-        self.create_text(120, 52, text="--/--", font=(fam, 24, "bold"), fill="#f2f2f2", tags="lcd")
-        self.create_text(120, 76, text=t("lcd_caption"), font=(fam, 7), fill="#9a9a9a")
-        # heartbeat: flashes on every reading, red when the data is stale
-        self.create_oval(200, 40, 210, 50, fill="#555555", outline="#1f1f1f", tags="hb")
-        for cx, cy in self.FANS:
-            self.create_oval(cx - self.FAN_R - 5, cy - self.FAN_R - 5,
-                             cx + self.FAN_R + 5, cy + self.FAN_R + 5,
-                             fill="#c9c9c9", outline="#3a3a3a", width=2)
-        pts = []
-        for i, x in enumerate(range(44, 200, 12)):
-            pts += [x, self.PTC_Y[0] if i % 2 == 0 else self.PTC_Y[1]]
-        self.create_line(*pts, fill="#8a8a8a", width=5, tags="ptc", joinstyle="round")
-        self.create_rectangle(40, 230, 200, 286, fill="#f7f7f7", outline="#3a3a3a", width=2)
-        for x in range(44, 200, 10):
-            self.create_line(x, 284, x + 10, 232, fill="#bdbdbd")
-        self.create_text(120, 258, text=t("pic_filter"), font=(fam, 10, "bold"), fill="#3a3a3a")
-        self.create_text(120, 313, text="Panda Breath", font=(fam, 9), fill="#777")
-        self.flow_ids, self.blade_ids, self.heat_ids = [], [], []
-
+    # --- inputs from the App --------------------------------------------------
     def set_state(self, on, heating):
         self.on, self.heating = bool(on), bool(heating)
 
     def set_reading(self, current, target):
-        cur = "--" if current is None else ("<15" if current < 15 else str(current))
-        tgt = "--" if target is None else str(target)
-        self.lcd_color = "#ffb070" if self.heating else ("#8fe3a5" if self.on else "#f2f2f2")
-        self.itemconfigure("lcd", text=f"{cur}/{tgt}", fill="#6f6f6f" if self.stale else self.lcd_color)
+        self.current, self.target = current, target
 
     def set_fresh(self, age, connected):
         """age = seconds since the last reading (None = none yet)."""
-        if age is None or not connected or age > 4:
-            color, stale = "#e03b3b", True
-        elif age < 0.35:
-            color, stale = "#7dff9a", False
-        else:
-            color, stale = "#2f9e5a", False
-        self.itemconfigure("hb", fill=color)
-        if stale != self.stale:
-            self.stale = stale
-            self.itemconfigure("lcd", fill="#6f6f6f" if stale else self.lcd_color)
+        self.age = age
+        self.stale = age is None or not connected or age > 4
+        self.flash = 0.0 if self.stale else max(0.0, 1 - age / 0.35)
+
+    # --- drawing ------------------------------------------------------------------
+    def state_color(self):
+        if self.stale:
+            return STALE
+        if not self.on:
+            return OFF
+        return HEAT if self.heating else BLUE
+
+    def status_text(self):
+        if self.stale:
+            return t("panel_stale", s="--" if self.age is None else f"{self.age:.0f}")
+        if not self.on:
+            return t("panel_off")
+        return t("panel_heating") if self.heating else t("panel_filtering")
 
     def tick(self):
-        if self.on:
-            self.angle = (self.angle + 24) % 360
-            self.flow = (self.flow + 6) % 30
-        self.phase = (self.phase + 1) % 20
-        self.redraw_dynamic()
+        try:
+            self.redraw(time.monotonic() - self.t0)
+        except tk.TclError:
+            return  # the window is closing
         self.after(60, self.tick)
 
-    def redraw_dynamic(self):
-        for ids in (self.flow_ids, self.blade_ids, self.heat_ids):
-            for i in ids:
-                self.delete(i)
-        self.flow_ids, self.blade_ids, self.heat_ids = [], [], []
-        if self.on:  # airflow from the filter up and out of the top grille
-            col = "#e08a2a" if self.heating else "#5b9bd5"
-            for x in (60, 120, 180):
-                y = 282 - self.flow
-                while y > 96:
-                    self.flow_ids.append(self.create_line(x, y, x, y - 12, fill=col, width=2, arrow=tk.LAST))
-                    y -= 30
-            for x in (70, 120, 170):
-                y = 30 - (self.flow % 18)
-                self.flow_ids.append(self.create_line(x, y, x, y - 10, fill=col, width=2, arrow=tk.LAST))
-        glow = ("#ff5a1f" if self.phase < 10 else "#ffa03a") if self.heating else "#8a8a8a"
-        self.itemconfigure("ptc", fill=glow)
-        if self.heating:
-            for x0 in (52, 100, 148):
+    def redraw(self, now_s):
+        self.delete("all")
+        self.draw_panda(120, 74, 0.62, now_s)
+        self.draw_numbers()
+        self.draw_trend()
+
+    def oval(self, x, y, rx, ry, fill, outline="", width=0):
+        self.create_oval(x - rx, y - ry, x + rx, y + ry, fill=fill, outline=outline, width=width)
+
+    def draw_panda(self, cx, cy, k, now_s):
+        grey = self.stale
+        ink = "#a6a6ac" if grey else INK
+        white = "#ffffff"
+        puff, eyes, blush = 1.0, "open", None
+        if not self.on:
+            eyes = "sleep"
+        elif self.heating:
+            puff = 1.12 + 0.025 * math.sin(now_s * math.pi * 2 / 1.3)
+            eyes, blush = "squeeze", BLUSH
+        else:
+            puff = 1.0 + 0.035 * math.sin(now_s * math.pi * 2 / 4)
+            blush = BLUSH_LITE
+        if grey:
+            puff, blush = 1.0, None
+        o = max(2.0, 4 * k)                       # outline thickness
+        line_w = max(2, round(3.5 * k))
+        cheeks = ((cx - 38 * k, cy + 28 * k), (cx + 38 * k, cy + 28 * k))
+        cr = 36 * k * puff
+
+        self.oval(cx - 50 * k, cy - 56 * k, 23 * k, 23 * k, ink)    # ears
+        self.oval(cx + 50 * k, cy - 56 * k, 23 * k, 23 * k, ink)
+        self.oval(cx, cy, 72 * k, 60 * k, ink)                       # outline
+        for x, y in cheeks:
+            self.oval(x, y, cr + o, cr * 0.88 + o, ink)
+        self.oval(cx, cy, 72 * k - o, 60 * k - o, white)             # face
+        for x, y in cheeks:
+            self.oval(x, y, cr, cr * 0.88, white)
+        if blush:
+            for sx in (-1, 1):
+                self.oval(cx + sx * 44 * k, cy + 36 * k, 14 * k * puff, 8 * k * puff, blush)
+        for sx in (-1, 1):                                           # eye patches
+            self.oval(cx + sx * 26 * k, cy - 8 * k, 16 * k, 21 * k, ink)
+        if eyes == "open":
+            for sx in (-1, 1):
+                self.oval(cx + sx * 25 * k, cy - 8 * k, 5.5 * k, 5.5 * k, white)
+        elif eyes == "sleep":
+            for sx in (-1, 1):
+                ex, ey, r = cx + sx * 26 * k, cy - 10 * k, 7 * k
+                self.create_arc(ex - r, ey - r, ex + r, ey + r, start=200, extent=140,
+                                style=tk.ARC, outline=white, width=line_w)
+        else:  # squeezed shut: > <
+            for sx in (-1, 1):
+                self.create_line(cx + sx * 32 * k, cy - 16 * k, cx + sx * 21 * k, cy - 8 * k,
+                                 cx + sx * 32 * k, cy, fill=white, width=line_w,
+                                 capstyle=tk.ROUND, joinstyle=tk.ROUND)
+        self.oval(cx, cy + 14 * k, 9 * k, 6 * k, ink)                # nose
+        mouth_w = max(2, round(2.5 * k))
+        if self.on and self.heating and not grey:                    # lips pressed
+            pts = []
+            for i, dx in enumerate((-13, -6, 0, 6, 13)):
+                pts += [cx + dx * k, cy + (30 if i % 2 == 0 else 27) * k]
+            self.create_line(*pts, fill=ink, width=mouth_w, capstyle=tk.ROUND, joinstyle=tk.ROUND)
+        elif self.on and not grey:                                   # small smile
+            r = 8 * k
+            self.create_arc(cx - r, cy + 22 * k - r, cx + r, cy + 22 * k + r, start=210, extent=120,
+                            style=tk.ARC, outline=ink, width=mouth_w)
+        else:
+            self.create_line(cx - 7 * k, cy + 29 * k, cx + 7 * k, cy + 29 * k, fill=ink,
+                             width=mouth_w, capstyle=tk.ROUND)
+        if self.on and self.heating and not grey:                    # heat above the head
+            for i in (-1, 0, 1):
+                x0 = cx + i * 20 * k
+                sway = math.sin(now_s * 4 + i) * 3 * k
+                ys = [cy - (62 + 8 * j) * k for j in range(4)]
                 pts = []
-                for i in range(0, 41, 4):
-                    pts += [x0 + i, self.PTC_Y[0] - 10 - 4 * math.sin((i + self.phase * 4) / 6.0)]
-                self.heat_ids.append(self.create_line(*pts, fill="#ffb070", width=2, smooth=True))
-        for cx, cy in self.FANS:
-            for k in range(3):
-                a = math.radians(self.angle + k * 120)
-                pts = []
-                for da, r in ((-0.55, self.FAN_R), (0.0, self.FAN_R), (0.55, self.FAN_R), (0.0, 8)):
-                    pts += [cx + r * math.cos(a + da), cy + r * math.sin(a + da)]
-                self.blade_ids.append(self.create_polygon(
-                    *pts, fill="#4d4d4d" if self.on else "#9a9a9a", outline="#2a2a2a", smooth=True))
-            self.blade_ids.append(self.create_oval(cx - 9, cy - 9, cx + 9, cy + 9, fill="#2a2a2a", outline=""))
+                for j, y in enumerate(ys):
+                    pts += [x0 + (sway if j % 2 == 0 else 5 * k - sway), y]
+                self.create_line(*pts, fill=HEAT_HI, width=max(2, round(3 * k)), smooth=True,
+                                 capstyle=tk.ROUND)
+        if grey:
+            self.create_text(cx + 78 * k, cy - 52 * k, text="?", fill=MUTED,
+                             font=(ui_family(), 15, "bold"))
+
+    def draw_numbers(self):
+        fam = ui_family()
+        cur = "--" if self.current is None else f"{self.current}°"
+        self.create_text(self.L, 152, text=cur, anchor="w", font=(fam, 28, "bold"),
+                         fill=STALE if self.stale else INK)
+        if self.target is not None:
+            self.create_text(self.R, 141, text=t("panel_target", t=self.target), anchor="e",
+                             font=(fam, 9), fill=MUTED)
+        item = self.create_text(self.R, 162, text=self.status_text(), anchor="e",
+                                font=(fam, 9, "bold" if not self.stale else "normal"),
+                                fill=MUTED if self.stale else INK)
+        x0 = self.bbox(item)[0]
+        self.create_rectangle(x0 - 13, 158, x0 - 5, 166, fill=self.state_color(), outline="")
+
+    def draw_trend(self):
+        fam = ui_family()
+        lo, hi = config.DEVICE_MIN_TEMP, self.cap + 5
+
+        def yv(v):
+            v = min(max(v, lo), hi)
+            return self.B - (v - lo) / (hi - lo) * (self.B - self.T)
+
+        for v in range(20, hi + 1, 10):
+            self.create_line(self.L, yv(v), self.R, yv(v), fill=GRID)
+        if self.target is not None:
+            ty = yv(self.target)
+            self.create_line(self.L, ty, self.R, ty, fill=MUTED, dash=(5, 4))
+            self.create_text(self.R, ty - 8, text=str(self.target), anchor="e",
+                             font=(fam, 8, "bold"), fill=INK)
+        self.create_text(self.L, 306, text=t("panel_window"), anchor="w", font=(fam, 8), fill=MUTED)
+        self.create_text(self.R, 306, text=t("panel_now"), anchor="e", font=(fam, 8), fill=MUTED)
+
+        now = time.monotonic()
+        span = self.WINDOW_S / self.COLUMNS
+        sums, counts = [0.0] * self.COLUMNS, [0] * self.COLUMNS
+        for ts, v in self.history:
+            age = now - ts
+            if age > self.WINDOW_S:
+                continue
+            col = self.COLUMNS - 1 - int(age / span)
+            if 0 <= col < self.COLUMNS:
+                sums[col] += v
+                counts[col] += 1
+        runs, run = [], []
+        width = self.R - self.L - 8
+        for c in range(self.COLUMNS):
+            if counts[c]:
+                run += [self.L + width * c / (self.COLUMNS - 1), yv(sums[c] / counts[c])]
+            elif run:
+                runs.append(run)
+                run = []
+        if run:
+            runs.append(run)
+        if not runs:
+            return
+        col = self.state_color()
+        for r in runs:
+            if len(r) >= 4:
+                self.create_line(*r, fill=col, width=2, capstyle=tk.ROUND, joinstyle=tk.ROUND)
+        ex, ey = runs[-1][-2], runs[-1][-1]
+        if self.stale:
+            self.oval(ex, ey, 4.5, 4.5, self.bg, outline=STALE, width=2)
+        else:
+            r = 4 + 3 * self.flash
+            self.oval(ex, ey, r, r, col, outline=self.bg, width=2)
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +391,7 @@ class App(tk.Tk):
         self.timer_at = None        # datetime the heater gets switched off
         self.timer_fired = False    # deadline passed: keep sending off until confirmed
         self.target = tk.IntVar(value=min(45, self.ceiling()))
+        self.readings = collections.deque()  # (time.monotonic(), °C), for the trend line
 
         self.log = RunLog(self.paths.log, on_line=self.feed_line)
         self.filter = FilterState(self.paths.filter, self.log)
@@ -430,7 +552,7 @@ class App(tk.Tk):
         # middle: drawing + filter gauge
         mid = ttk.Frame(self)
         mid.grid(row=1, column=1, sticky="n", padx=6, pady=8)
-        self.pic = HeaterCanvas(mid)
+        self.pic = StatusPanel(mid, self.readings, self.ceiling())
         self.pic.pack()
         fbox = ttk.LabelFrame(mid, text=t("filter"))
         fbox.pack(fill="x", pady=(6, 0))
@@ -674,6 +796,7 @@ class App(tk.Tk):
                 s = item[1]
                 if "warehouse_temper" in s:
                     self.last_frame = time.monotonic()
+                    self.add_reading(s["warehouse_temper"])
                 if "work_on" in s and self.timer_fired:
                     # the timer already switched off; the heater's own word decides
                     if s["work_on"]:
@@ -703,6 +826,16 @@ class App(tk.Tk):
         except queue.Empty:
             pass
         self.after(300, self.poll)
+
+    def add_reading(self, value):
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return
+        now = time.monotonic()
+        self.readings.append((now, value))
+        while self.readings and now - self.readings[0][0] > StatusPanel.WINDOW_S + 60:
+            self.readings.popleft()
 
     def render(self):
         s = self.state_
