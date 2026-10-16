@@ -53,7 +53,7 @@ jobs:
           --add-data "panda_breath_control/assets;panda_breath_control/assets"
           --collect-submodules websockets
           panda-breath-control.pyw
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-exe
           path: dist/PandaBreathControl.exe
@@ -68,7 +68,7 @@ jobs:
           python-version: "3.13"
       - run: pip install build
       - run: python -m build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: python-package
           path: dist/*
