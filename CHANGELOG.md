@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-10-16
 
 - New status panel in place of the drawing of the heater: a panda that sleeps
   when off, breathes while filtering and puffs red cheeks while heating, and a
