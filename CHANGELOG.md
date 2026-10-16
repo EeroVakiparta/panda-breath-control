@@ -4,7 +4,8 @@
 
 - New status panel in place of the drawing of the heater: a panda that sleeps
   when off, breathes while filtering and puffs red cheeks while heating, and a
-  trend line of the last 30 minutes of readings against the target.
+  trend line of the last 30 minutes of readings against the target. The
+  chamber and target show as one big number, `45/55`.
 - Sharper icon: the 16, 20, 24 and 32 px sizes are drawn on the pixel grid,
   and a thin white edge keeps the black ears visible on a dark taskbar.
 - Windows: the taskbar gets the 24 px icon frame directly; Tk only passed a

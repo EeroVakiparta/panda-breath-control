@@ -55,7 +55,7 @@ class StatusPanel(tk.Canvas):
     W, H = 240, 322
     WINDOW_S = 30 * 60
     COLUMNS = 98
-    L, R, T, B = 22, 218, 186, 290
+    L, R, T, B = 22, 218, 200, 290
 
     def __init__(self, master, history, cap):
         bg = ttk.Style(master).lookup("TFrame", "background") or "#f0f0f0"
@@ -193,17 +193,16 @@ class StatusPanel(tk.Canvas):
 
     def draw_numbers(self):
         fam = ui_family()
-        cur = "--" if self.current is None else f"{self.current}°"
-        self.create_text(self.L, 152, text=cur, anchor="w", font=(fam, 28, "bold"),
+        cur = "--" if self.current is None else str(self.current)
+        tgt = "--" if self.target is None else str(self.target)
+        self.create_text(120, 150, text=f"{cur}/{tgt}", font=(fam, 32, "bold"),
                          fill=STALE if self.stale else INK)
-        if self.target is not None:
-            self.create_text(self.R, 141, text=t("panel_target", t=self.target), anchor="e",
-                             font=(fam, 9), fill=MUTED)
-        item = self.create_text(self.R, 162, text=self.status_text(), anchor="e",
+        self.create_text(self.L, 180, text=t("panel_caption"), anchor="w", font=(fam, 8), fill=MUTED)
+        item = self.create_text(self.R, 180, text=self.status_text(), anchor="e",
                                 font=(fam, 9, "bold" if not self.stale else "normal"),
                                 fill=MUTED if self.stale else INK)
         x0 = self.bbox(item)[0]
-        self.create_rectangle(x0 - 13, 158, x0 - 5, 166, fill=self.state_color(), outline="")
+        self.create_rectangle(x0 - 13, 176, x0 - 5, 184, fill=self.state_color(), outline="")
 
     def draw_trend(self):
         fam = ui_family()

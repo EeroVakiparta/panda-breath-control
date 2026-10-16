@@ -129,8 +129,8 @@ The panda in the middle of the window shows the state:
 | Eyes squeezed shut, red puffed cheeks | On and heating |
 | Grey, with a question mark | No reading for 4 seconds, or no connection |
 
-Below it are the chamber reading, the target and a line of the last 30
-minutes of readings against the dashed target. The dot at the end of the line
+Below it, in big numbers, is `chamber/target` in °C, for example `45/55`,
+then a line of the last 30 minutes of readings against the dashed target. The dot at the end of the line
 pulses with every reading. The history is kept only while the app is open.
 
 The chamber number comes from the
