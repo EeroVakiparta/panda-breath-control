@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,14 +7,14 @@ name = "panda-breath-control"
 dynamic = ["version"]
 description = "Unofficial desktop control window for the BIQU Panda Breath chamber heater"
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [{ name = "Eero Vakiparta" }]
 requires-python = ">=3.9"
 dependencies = ["websockets>=12"]
 keywords = ["3d-printing", "panda-breath", "biqu", "chamber-heater", "tkinter"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: Microsoft :: Windows",
     "Environment :: Win32 (MS Windows)",
     "Environment :: X11 Applications",
@@ -31,8 +31,8 @@ panda-breath-control = "panda_breath_control.ui:main"
 [project.scripts]
 panda-breath = "panda_breath_control.cli:main"
 
-[tool.setuptools]
-packages = ["panda_breath_control"]
+[tool.setuptools.packages.find]
+include = ["panda_breath_control", "panda_breath_control.*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "panda_breath_control.__version__" }

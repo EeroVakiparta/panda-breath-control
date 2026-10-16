@@ -1,16 +1,25 @@
-<img src="docs/logo.png" alt="" width="120" align="right">
+<p align="center">
+  <img src="docs/logo.png" alt="Panda Breath Control logo: a panda holding its breath" width="160">
+</p>
 
-# Panda Breath Control
+<h1 align="center">Panda Breath Control</h1>
 
-A desktop app for the BIQU Panda Breath chamber heater and air filter. It
-talks to the heater over your home network and adds what the heater's own web
-page lacks: one-click material presets, an auto-off timer, a filter wear gauge
-and a run log.
+**TL;DR** Unofficial desktop app for the BIQU Panda Breath chamber heater:
+material presets, auto-off timer, filter gauge, run log. Windows:
+[PandaBreathControl.exe](https://github.com/EeroVakiparta/panda-breath-control/releases/latest).
+Anything with Python 3.9+:
 
-I wrote it for a Panda Breath on an Elegoo Centauri Carbon 2, a printer BIQU
-does not support, mostly because I wanted the heater to switch itself off
-when a long print finished while I was away. It now has profiles for other
-printers too.
+    pip install git+https://github.com/EeroVakiparta/panda-breath-control && panda-breath-control
+
+Set the heater address in Settings (`PandaBreath.local` or its IP). From
+scripts or an AI agent: `panda-breath status`, `panda-breath on 50`,
+`panda-breath off`. Use at your own risk ([disclaimer](DISCLAIMER.md)).
+
+I made this because the Panda Breath's own web UI did not load reliably for
+me. Once I had something that did, I also wanted the heater to switch itself
+off when a long print finished while I was away. My heater sits on an Elegoo
+Centauri Carbon 2, a printer BIQU does not support; the app has profiles for
+other printers too.
 
 This is an unofficial program, not affiliated with BIQU / BIGTREETECH. Read
 [Safety](#safety) before you use it.
@@ -50,7 +59,15 @@ yet. Reports are welcome.
 
 ## Install
 
-### Windows
+### Windows, without Python
+
+Download `PandaBreathControl.exe` from the
+[latest release](https://github.com/EeroVakiparta/panda-breath-control/releases/latest)
+and run it. It is not code-signed, so Windows SmartScreen may say "Windows
+protected your PC"; choose More info, then Run anyway. Settings and the log
+go to the same folder as with the Python version.
+
+### Windows, with Python
 
 1. Install Python from [python.org](https://www.python.org/downloads/) and
    tick "Add python.exe to PATH" in the installer.
@@ -106,9 +123,10 @@ heater's own sensor, which sits next to the heating element and reads high:
 one Bambu Lab user saw 60 °C on the Panda Breath while the printer measured
 50 °C. Trust your printer's chamber sensor when it has one.
 
-The heater does not report whether its element or fans are running.
-"Heating" in the status line is an estimate: switched on and reading below
-the target.
+While the heater is on, its fans keep running for filtration, also once the
+chamber has reached the target. The heater does not report whether its
+heating element is running, so "heating" in the status line is an estimate:
+switched on and reading below the target.
 
 ### Auto-off timer
 
@@ -246,6 +264,12 @@ and no update check. All its files stay on your computer.
     pip install -r requirements.txt
     python -m unittest discover -s tests -t .
     python -m panda_breath_control --demo
+
+Releases: bump `__version__` in `panda_breath_control/__init__.py`, add a
+`## <version>` section to CHANGELOG.md, then push a tag `v<version>`. The
+release workflow tests, builds the Windows .exe and the Python packages and
+publishes the GitHub release with that CHANGELOG section as its notes. Run
+the workflow by hand from the Actions tab to build without publishing.
 
 The icon is drawn by `tools/make_icon.py` (needs Pillow). Translations live in
 `panda_breath_control/i18n.py`; see [CONTRIBUTING.md](CONTRIBUTING.md).

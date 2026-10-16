@@ -48,7 +48,8 @@ There is no REST API.
 
 Things the heater does not report: whether the heating element or the fans
 are running at a given moment. "Heating" in this program is an estimate
-(switched on and reading below target).
+(switched on and reading below target). Observed on the unit: in Forced On
+the fans keep running for filtration after the chamber reaches the target.
 
 Auto mode follows a Bambu Lab printer bound on the web page. BIQU's wiki says
 Klipper printers currently need manual control, with automatic operation to
