@@ -256,13 +256,7 @@ class App(tk.Tk):
         i18n.set_language(self.settings["language"])
         self.title(config.APP_NAME + (" (demo)" if demo else ""))
         self.resizable(False, False)
-        try:
-            self.iconbitmap(os.path.join(ASSETS, "icon.ico"))
-        except tk.TclError:
-            try:
-                self.iconphoto(True, tk.PhotoImage(file=os.path.join(ASSETS, "icon-64.png")))
-            except tk.TclError:
-                pass
+        self.set_app_icon()
 
         self.inbox = queue.Queue()
         self.host = "demo" if demo else config.effective_host(self.settings)
@@ -293,6 +287,7 @@ class App(tk.Tk):
             self.settings["disclaimer_accepted"] = True
             config.save_settings(self.paths, self.settings)
         self.deiconify()
+        self.after(0, self.set_taskbar_icon)
 
         self.protocol("WM_DELETE_WINDOW", self.on_close)
         self.client.start()
@@ -303,6 +298,47 @@ class App(tk.Tk):
 
     def ceiling(self):
         return config.profile_ceiling(self.settings)
+
+    def set_app_icon(self):
+        try:
+            self.iconbitmap(os.path.join(ASSETS, "icon.ico"))
+        except tk.TclError:  # not Windows
+            try:
+                self._icon_img = tk.PhotoImage(file=os.path.join(ASSETS, "icon-64.png"))
+                self.iconphoto(True, self._icon_img)
+            except tk.TclError:
+                pass
+
+    def set_taskbar_icon(self):
+        """Hand Windows the icon frames at the sizes it draws them.
+
+        Tk passes only 16 and 32 px icons, and the Windows 11 taskbar shrinks
+        the 32 px one to 24 px with a jagged result. The .ico has a frame
+        drawn for each size, so load the exact ones and set them directly.
+        """
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+            from ctypes import wintypes
+            user32 = ctypes.windll.user32
+            user32.LoadImageW.restype = ctypes.c_void_p
+            user32.LoadImageW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT,
+                                          ctypes.c_int, ctypes.c_int, wintypes.UINT]
+            user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, ctypes.c_void_p]
+            scale = user32.GetDpiForSystem() / 96 if hasattr(user32, "GetDpiForSystem") else 1.0
+            win11 = sys.getwindowsversion().build >= 22000
+            big = round((24 if win11 else 32) * scale)
+            small = round(16 * scale)
+            hwnd = int(self.wm_frame(), 16)
+            path = os.path.join(ASSETS, "icon.ico")
+            IMAGE_ICON, LR_LOADFROMFILE, WM_SETICON = 1, 0x10, 0x80
+            for which, size in ((1, big), (0, small)):  # ICON_BIG, ICON_SMALL
+                handle = user32.LoadImageW(None, path, IMAGE_ICON, size, size, LR_LOADFROMFILE)
+                if handle:
+                    user32.SendMessageW(hwnd, WM_SETICON, which, handle)
+        except (AttributeError, OSError, ValueError, tk.TclError):
+            pass
 
     # --- layout ---------------------------------------------------------------
     def build_ui(self):

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Sharper icon: the 16, 20, 24 and 32 px sizes are drawn on the pixel grid,
+  and a thin white edge keeps the black ears visible on a dark taskbar.
+- Windows: the taskbar gets the 24 px icon frame directly; Tk only passed a
+  32 px icon, which Windows shrank to a jagged 24 px.
+
 ## 0.1.0 - 2026-10-16
 
 First public release.
